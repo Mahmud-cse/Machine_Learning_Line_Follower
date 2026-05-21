@@ -2,6 +2,7 @@ param(
     [string]$BagDir = "",
     [string]$ExtractedImagesDir = "extracted_images",
     [string]$VisualizationOutputDir = "visualization_output",
+    [int]$Max = 0,
     [switch]$NoPreview,
     [switch]$StartCompose
 )
@@ -92,6 +93,7 @@ Write-Step "Checking required Python packages"
 Ensure-Package -PythonExe $pythonExe -ImportName "cv2" -PipName "opencv-python"
 Ensure-Package -PythonExe $pythonExe -ImportName "rosbags" -PipName "rosbags"
 Ensure-Package -PythonExe $pythonExe -ImportName "numpy" -PipName "numpy"
+Ensure-Package -PythonExe $pythonExe -ImportName "sklearn" -PipName "scikit-learn"
 
 if ([string]::IsNullOrWhiteSpace($BagDir)) {
     $BagDir = Get-FirstBagDir
@@ -100,9 +102,17 @@ if ([string]::IsNullOrWhiteSpace($BagDir)) {
 Write-Step "Using bag directory: $BagDir"
 
 Write-Step "Extracting images from bag"
-& $pythonExe ".\docs\extract_images_from_bag.py" $BagDir --out $ExtractedImagesDir
-if ($LASTEXITCODE -ne 0) {
-    throw "Image extraction failed."
+$imageCount = 0
+if (Test-Path $ExtractedImagesDir) {
+    $imageCount = (Get-ChildItem -Path $ExtractedImagesDir -Filter *.jpg).Count
+}
+if ($imageCount -ge 100) {
+    Write-Host "Found $imageCount images already in $ExtractedImagesDir. Skipping extraction." -ForegroundColor Green
+} else {
+    & $pythonExe ".\docs\extract_images_from_bag.py" $BagDir --out $ExtractedImagesDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "Image extraction failed."
+    }
 }
 
 Write-Step "Running steering visualization"
@@ -111,6 +121,9 @@ $vizArgs = @(
     "--images", $ExtractedImagesDir,
     "--output", $VisualizationOutputDir
 )
+if ($Max -gt 0) {
+    $vizArgs += @("--max", $Max)
+}
 if (-not $NoPreview) {
     $vizArgs += "--show"
 }
